@@ -91,6 +91,7 @@ mod test {
         let market = vec!(Investment::new("VEU", 10.0), Investment::new("BD", 100.0));
         account.positions.insert("VEU".to_string(), 3.0);
         account.positions.insert("BD".to_string(), 1.0);
+        account.positions.insert("NO-PRICE".to_string(), 5.0);
         assert_eq!(account.value(&market), 131.0);
     }
 }
