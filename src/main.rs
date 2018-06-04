@@ -1,6 +1,5 @@
 extern crate actix_web;
 use actix_web::{server, App, Json, http, HttpRequest, HttpResponse, Responder};
-use actix_web::error::ErrorBadRequest;
 extern crate etf_balancer;
 use etf_balancer::run_balancing;
 use etf_balancer::accounts::Portfolio;
@@ -12,7 +11,7 @@ fn index(_req: HttpRequest) -> impl Responder {
 fn balance(accounts: Json<Portfolio>) -> impl Responder {
     match accounts.validate() {
         None => HttpResponse::Ok().json(run_balancing(accounts.into_inner())),
-        Some(err) => HttpResponse::from_error(ErrorBadRequest(err))
+        Some(err) => HttpResponse::BadRequest().json(err)
     }
 }
 
