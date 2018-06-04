@@ -15,6 +15,14 @@ impl Portfolio {
             target: HashMap::new(), accounts: vec!(), market: vec!()
         }
     }
+
+    pub fn validate(&self) -> Option<&'static str> {
+        let sum: f32 = self.target.iter().map(|(_, p)| p).sum();
+        if (sum - 1.0).abs() > 0.01 {
+            return Some("Allocations must add up to 1.0")
+        }
+        None
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -62,7 +70,6 @@ impl Investment {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Results {
-    taxable_txns: i32,
     positions: HashMap<String, HashMap<String, f32>>,
     cash: f32
 }
@@ -70,14 +77,26 @@ pub struct Results {
 impl Results {
     fn new() -> Self {
         Results {
-            taxable_txns: 0, cash: 0.0, positions: HashMap::new()
+            cash: 0.0, positions: HashMap::new()
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use spectral::prelude::*;
     use super::*;
+
+    #[test]
+    fn test_portfolio_validation() {
+        let mut portfolio = Portfolio::new();
+        assert_that(&portfolio.validate())
+            .is_some()
+            .is_equal_to("Allocations must add up to 1.0");
+
+        portfolio.target.insert("A".to_string(), 1.001);
+        assert_that(&portfolio.validate()).is_none();
+    }
 
     #[test]
     fn test_account_value() {
