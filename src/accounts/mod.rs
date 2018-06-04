@@ -1,6 +1,6 @@
 pub mod balancer;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Portfolio {
@@ -21,7 +21,30 @@ impl Portfolio {
         if (sum - 1.0).abs() > 0.01 {
             return Some("Allocations must add up to 1.0")
         }
+        let prices: HashSet<&String> = self.market.iter().map(|i| &i.symbol).collect();
+        let shares = self.total_shares();
+        let missing_owned = shares.iter().map(|(s, _)| s).filter(|s| !prices.contains(s)).count();
+        let missing_allocated = self.target.iter().map(|(s, _)| s).filter(|s| !prices.contains(s)).count();
+        if missing_allocated > 0 || missing_owned > 0 {
+            return Some("Missing prices for some investments") // TODO: format this?
+        }
+
         None
+    }
+
+    fn total_value(&self) -> f32 {
+        self.accounts.iter().map(|a| a.value(&self.market)).sum::<f32>()
+    }
+
+    fn total_shares(&self) -> HashMap<String, f32> {
+        let mut tot_shares = HashMap::new();
+        for a in self.accounts.iter() {
+            for (sym, shares) in a.positions.iter() {
+                let current = tot_shares.entry(sym.clone()).or_insert(0.0);
+                *current += shares;
+            }
+        }
+        tot_shares
     }
 }
 
@@ -88,14 +111,48 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_portfolio_validation() {
+    fn test_portfolio_validation_alloc() {
         let mut portfolio = Portfolio::new();
+        portfolio.market.push(Investment::new("A", 1.0));
         assert_that(&portfolio.validate())
             .is_some()
             .is_equal_to("Allocations must add up to 1.0");
 
         portfolio.target.insert("A".to_string(), 1.001);
         assert_that(&portfolio.validate()).is_none();
+    }
+
+    #[test]
+    fn test_portfolio_validation_market() {
+        let mut portfolio = Portfolio::new();
+        portfolio.target.insert("B".to_string(), 1.001);
+        let mut a = Account::new("a");
+        a.positions.insert("A".to_string(), 5.0);
+        portfolio.accounts.push(a);
+
+        assert_that(&portfolio.validate())
+            .is_some()
+            .is_equal_to("Missing prices for some investments");
+
+        portfolio.market.push(Investment::new("A", 1.0));
+        portfolio.market.push(Investment::new("B", 1.0));
+        assert_that(&portfolio.validate()).is_none();
+    }
+
+    #[test]
+    fn test_portfolio_shares() {
+        let mut portfolio = Portfolio::new();
+        let mut a = Account::new("a");
+        a.positions.insert("A".to_string(), 5.0);
+        a.positions.insert("B".to_string(), 10.0);
+        let mut b = Account::new("b");
+        b.positions.insert("B".to_string(), 20.0);
+        portfolio.accounts.push(a);
+        portfolio.accounts.push(b);
+
+        let shares = portfolio.total_shares();
+        assert_that(shares.get("A").unwrap()).is_close_to(5.0, 0.001);
+        assert_that(shares.get("B").unwrap()).is_close_to(30.0, 0.001);
     }
 
     #[test]
