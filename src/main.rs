@@ -1,13 +1,14 @@
 extern crate actix_web;
 use actix_web::{server, App, Json, http, HttpRequest, HttpResponse, Responder};
 extern crate etf_balancer;
-use etf_balancer::accounts::{run_balancing, Accounts};
+use etf_balancer::run_balancing;
+use etf_balancer::accounts::Portfolio;
 
 fn index(_req: HttpRequest) -> impl Responder {
     "Hello, rust"
 }
 
-fn balance(accounts: Json<Accounts>) -> impl Responder {
+fn balance(accounts: Json<Portfolio>) -> impl Responder {
     HttpResponse::Ok().json(run_balancing(accounts.into_inner()))
 }
 

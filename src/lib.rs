@@ -2,4 +2,4 @@
 extern crate serde_derive;
 
 pub mod accounts;
-pub mod vanguard;
+pub use accounts::balancer::run_balancing;
