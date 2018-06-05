@@ -17,10 +17,12 @@ impl Portfolio {
     }
 
     pub fn validate(&self) -> Option<&'static str> {
+        // make sure the requested allocations add up to 1 (100%)
         let sum: f32 = self.target.iter().map(|(_, p)| p).sum();
         if (sum - 1.0).abs() > 0.01 {
             return Some("Allocations must add up to 1.0")
         }
+        // make sure we were given price info for all allocated and owned stocks
         let prices: HashSet<&String> = self.market.iter().map(|i| &i.symbol).collect();
         let shares = self.total_shares();
         let missing_owned = shares.iter().map(|(s, _)| s).filter(|s| !prices.contains(s)).count();
