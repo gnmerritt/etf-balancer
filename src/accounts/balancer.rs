@@ -56,11 +56,13 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         }
     }
 
+    results.cash = free_cash;
     results
 }
 
 #[cfg(test)]
 mod single_account {
+    use std::ops::IndexMut;
     use spectral::prelude::*;
     use super::*;
 
@@ -69,8 +71,7 @@ mod single_account {
         assert_eq!(run_balancing(Portfolio::new()), Results::new());
     }
 
-    #[test]
-    fn simple_balance() {
+    fn build_portfolio() -> Portfolio {
         let mut p = Portfolio::new();
         let mut acct = Account::new("taxed");
         acct.cash = 10_000.0;
@@ -79,12 +80,30 @@ mod single_account {
         p.target.insert(String::from("B"), 0.5);
         p.market.push(Investment::new("A", 10.0));
         p.market.push(Investment::new("B", 100.0));
+        p
+    }
+
+    #[test]
+    fn simple_balance() {
+        let p = build_portfolio();
         assert_that(&p.validate()).is_none();
         assert_that(&p.total_shares()).is_empty();
 
         let r = run_balancing(p);
 
         assert_that(&r.cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 500.0);
+        check_shares(&r, "taxed", "B", 50.0);
+    }
+
+    #[test]
+    fn simple_extra_cash() {
+        let mut p = build_portfolio();
+        p.accounts.index_mut(0).cash += 5.0;
+
+        let r = run_balancing(p);
+
+        assert_that(&r.cash).is_close_to(5.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
     }
