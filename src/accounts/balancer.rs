@@ -11,52 +11,59 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
     let mut shares_delta = c!{ s => d / prices.get(s).unwrap(), for (s, d) in cash_delta };
 
-    let mut free_cash: f32 = portfolio.accounts.iter().map(|a| a.cash).sum();
     let mut results = Results::new();
+    results.cash = portfolio.accounts.iter().map(|a| a.cash).sum();
 
     for a in &portfolio.accounts {
         results.positions.insert(a.name.clone(), a.positions.clone());
     }
 
-    println!("Accounts before action: {:?}", portfolio.accounts);
+    println!("Accounts before action: {:?}", results);
+    println!("Shares delta before action: {:?}", shares_delta);
+
+    let account = "taxed"; // TODO: remove
 
     // first sell shares we're overweight in
     for (sym, delta) in shares_delta.iter().filter(|(_, &d)| d < -1.0) {
-
+        println!("overweight in {}, selling {}", sym, delta);
+        let price = *prices.get(*sym).unwrap();
+        results.cash += price * delta.abs();
+        results.positions
+            .get_mut(account).expect("missing acct")
+            .entry(sym.to_string())
+            .and_modify(|e| *e -= delta.abs());
+        println!("Sold {} x {}@{}, fc={}", delta.abs(), sym, price, results.cash);
     }
 
-    let account = "taxed"; // TODO
-
-    let mut i = 0;
+    println!("Results after sale of overweight positions: {:?}", results);
 
     // buy some of each share we need more of
-    while free_cash > 0.0 && !shares_delta.is_empty() {
+    while results.cash > 0.0 && !shares_delta.is_empty() {
         let mut none_left = true;
 
         for (sym, shares) in shares_delta.iter_mut() {
-            if *shares < 1.0 {
+            let price = *prices.get(*sym).unwrap();
+            if *shares < 1.0 || price > results.cash {
                 continue;
             }
             none_left = false;
 
-            let price = *prices.get(*sym).unwrap();
-            if free_cash >= price {
-                free_cash -= price;
-                *shares -= 1.0;
-                *results.positions
-                    .get_mut(account).expect("missing acct")
-                    .entry(sym.to_string()).or_insert(0.0) += 1.0;
-                println!("Bought {}@{}, fc={}", sym, price, free_cash);
-            }
+            // TODO: factor this into the struct, I think
+            results.cash -= price;
+            *shares -= 1.0;
+            results.positions
+                .get_mut(account).expect("missing acct")
+                .entry(sym.to_string())
+                .and_modify(|e| *e += 1.0)
+                .or_insert(1.0);
+            println!("Bought {}@{}, fc={}", sym, price, results.cash);
         }
 
-        i += 1; // TODO: remove this
-        if none_left || i > 100_000 {
+        if none_left {
             break;
         }
     }
 
-    results.cash = free_cash;
     results
 }
 
@@ -115,9 +122,20 @@ mod single_account {
     }
 
     #[test]
-    #[ignore]
     fn test_with_sale() {
-        // TODO
+        let mut p = build_portfolio();
+        {
+            let taxed = p.accounts.index_mut(0);
+            // 100% B and no cash, will need to sell half to buy A
+            taxed.cash = 0.0;
+            taxed.positions.insert(String::from("B"), 100.0);
+        }
+
+        let r = run_balancing(p);
+
+        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 500.0);
+        check_shares(&r, "taxed", "B", 50.0);
     }
 }
 
