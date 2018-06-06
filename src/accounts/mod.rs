@@ -6,13 +6,14 @@ use std::collections::{HashMap, HashSet};
 pub struct Portfolio {
     target: HashMap<String, f32>,
     accounts: Vec<Account>,
-    market: Vec<Investment>
+    market: Vec<Investment>,
+    no_taxed_sales: Option<bool>, // defaults to allowing sales
 }
 
 impl Portfolio {
     fn new() -> Self {
         Portfolio {
-            target: HashMap::new(), accounts: vec!(), market: vec!()
+            target: HashMap::new(), accounts: vec!(), market: vec!(), no_taxed_sales: None
         }
     }
 
@@ -47,6 +48,13 @@ impl Portfolio {
             }
         }
         tot_shares
+    }
+
+    fn can_sell_taxed(&self) -> bool {
+        match self.no_taxed_sales  {
+            Some(no_sales) => !no_sales,
+            None => true,
+        }
     }
 }
 
@@ -122,6 +130,18 @@ mod test {
 
         portfolio.target.insert("A".to_string(), 1.001);
         assert_that(&portfolio.validate()).is_none();
+    }
+
+    #[test]
+    fn portfolio_can_sell_taxed() {
+        let mut p = Portfolio::new();
+        assert!(p.can_sell_taxed());
+
+        p.no_taxed_sales = Some(false);
+        assert!(p.can_sell_taxed());
+
+        p.no_taxed_sales = Some(true);
+        assert!(!p.can_sell_taxed());
     }
 
     #[test]
