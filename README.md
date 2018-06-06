@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/gnmerritt/etf-balancer.svg?branch=master)](https://travis-ci.org/gnmerritt/etf-balancer)
+
 # etf-balancer
 
 Try and optimally balance an account of Vanguard ETFs given a target allocation. Runs as an API for easy use from google sheets.
