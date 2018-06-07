@@ -4,6 +4,16 @@
 
 Try and optimally balance an account of Vanguard ETFs given a target allocation. Runs as an API for easy use from google sheets.
 
+## usage:
+
+Describe your target allocation, your accounts and provide current market quotes
+for the funds you're interested in balancing, something like this (via the
+excellent [httpie](https://httpie.org/)):
+
+```bash
+http POST etf.gnmerritt.net/balance target:='{"VEU":0.7,"VOO":0.3}' accounts:='[{"name":"taxed", "tax_sheltered":false,"cash":1000, "positions":{"VEU":2, "VOO":2}}]' market:='[{"symbol":"VEU", "price":54.33},{"symbol":"VOO", "price":254.77}]'
+```
+
 ## Given info
 ```
 symbols:   [world, mid cap, reit, 500, small cap, bond]
