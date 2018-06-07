@@ -39,6 +39,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             if !account.tax_sheltered && !portfolio.can_sell_taxed() {
                 continue;
             }
+            // TODO: remove direct 'positions' mutation
             let acct_shares = results.positions
                 .get_mut(&account.name).expect("missing acct")
                 .entry(sym.to_string())
@@ -80,14 +81,9 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 }
                 none_left = false;
 
-                // TODO: factor this into the struct, I think
                 *cash -= price;
                 *shares -= 1.0;
-                results.positions
-                    .get_mut(&account.name).expect("missing acct")
-                    .entry(sym.to_string())
-                    .and_modify(|e| *e += 1.0)
-                    .or_insert(1.0);
+                results.transact(&account.name, sym, 1.0);
                 println!("acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
             }
         }
@@ -109,11 +105,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 none_left = false;
 
                 *cash -= price;
-                results.positions
-                    .get_mut(&account.name).expect("missing acct")
-                    .entry(sym.to_string())
-                    .and_modify(|e| *e += 1.0)
-                    .or_insert(1.0);
+                results.transact(&account.name, sym, 1.0);
                 println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
             }
         }
@@ -124,6 +116,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     }
 
     results.cash = free_cash.iter().map(|(_, c)| c).sum();
+    results.calculate_percentages(&prices);
     println!("Results after balancing: {:?}", results);
     results
 }
@@ -133,6 +126,7 @@ mod single_account {
     use std::ops::IndexMut;
     use spectral::prelude::*;
     use super::*;
+    use super::test::check_allocation;
 
     #[test]
     fn check_empty_case() {
@@ -162,6 +156,7 @@ mod single_account {
         assert_that(&r.cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
+
     }
 
     #[test]
@@ -174,6 +169,9 @@ mod single_account {
         assert_that(&r.cash).is_close_to(5.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
+        check_allocation(&r, "A", 0.499);
+        check_allocation(&r, "B", 0.499);
+        check_allocation(&r, "cash", 0.001);
     }
 
     pub fn check_shares(r: &Results, acct: &str, sym: &str, expected: f32) {
@@ -230,6 +228,9 @@ mod single_account {
         assert_that(&r.cash).is_close_to(0.0, 0.1);
         check_shares(&r, "ira", "A", 500.0);
         check_shares(&r, "ira", "B", 50.0);
+        check_allocation(&r, "A", 0.5);
+        check_allocation(&r, "B", 0.5);
+        check_allocation(&r, "cash", 0.0);
     }
 
     #[test]
@@ -255,6 +256,7 @@ mod multiple_accounts {
     use spectral::prelude::*;
     use super::*;
     use super::single_account::check_shares;
+    use super::test::check_allocation;
 
     fn build_multi_portfolio() -> Portfolio {
         let mut p = Portfolio::new();
@@ -279,12 +281,15 @@ mod multiple_accounts {
         let r = run_balancing(p);
 
         assert_that(&r.cash).is_close_to(0.0, 0.1);
-        // TODO: build more reporting into results to check these
         check_shares(&r, "taxed", "A", 480.0); // 500*$10 = $5k, 50%
         check_shares(&r, "ira", "A", 20.0);
 
         check_shares(&r, "taxed", "B", 32.0); // 50*$100 = $5k, 50%
         check_shares(&r, "ira", "B", 18.0);
+
+        check_allocation(&r, "A", 0.5);
+        check_allocation(&r, "B", 0.5);
+        check_allocation(&r, "cash", 0.0);
     }
 
     #[test]

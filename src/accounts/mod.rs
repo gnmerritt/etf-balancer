@@ -104,13 +104,14 @@ impl Investment {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Results {
     positions: HashMap<String, HashMap<String, f32>>,
+    allocations: HashMap<String, f32>,
     cash: f32
 }
 
 impl Results {
     fn new() -> Self {
         Results {
-            cash: 0.0, positions: HashMap::new()
+            cash: 0.0, positions: HashMap::new(), allocations: HashMap::new()
         }
     }
 
@@ -120,6 +121,37 @@ impl Results {
             r.positions.insert(a.name.clone(), a.positions.clone());
         }
         r
+    }
+
+    fn transact(&mut self, account: &str, symbol: &str, shares: f32) {
+        let account = self.positions.entry(account.to_string()).or_insert(HashMap::new());
+        let current = account.entry(symbol.to_string()).or_insert(0.0);
+        *current += shares;
+        if *current < 0.0 {
+            *current = 0.0;
+        }
+    }
+
+    fn calculate_percentages(&mut self, prices: &HashMap<&String, f32>) {
+        let mut total = self.cash;
+
+        for (_, positions) in self.positions.iter() {
+            for (sym, shares) in positions.iter() {
+                let price = *prices.get(sym).expect("unexpected missing price");
+                let gross = price * shares;
+                total += gross;
+                self.allocations.entry(sym.to_string())
+                    .and_modify(|g| *g += gross)
+                    .or_insert(gross);
+            }
+        }
+
+        if total > 0.0 {
+            for (_, gross) in self.allocations.iter_mut() {
+                *gross = *gross / total;
+            }
+            self.allocations.insert(String::from("cash"), self.cash / total);
+        }
     }
 }
 
@@ -199,5 +231,34 @@ mod test {
         account.positions.insert("BD".to_string(), 1.0);
         account.positions.insert("NO-PRICE".to_string(), 5.0);
         assert_eq!(account.value(&market), 131.0);
+    }
+
+    #[test]
+    fn test_result_allocations() {
+        let a = String::from("A");
+        let b = String::from("B");
+        let mut market = HashMap::new();
+        market.insert(&a, 10.0);
+        market.insert(&b, 1.0);
+
+        let mut r = Results::new();
+        r.transact("a1", "A", 1.0);
+
+        r.calculate_percentages(&market); // TODO: fix type of market
+        check_allocation(&r, "A", 1.0);
+
+        r.cash = 50.0;
+        r.transact("a2", "A", 3.0);
+        r.transact("a1", "B", 10.0);
+        r.calculate_percentages(&market);
+
+        check_allocation(&r, "A", 0.4);
+        check_allocation(&r, "B", 0.1);
+        check_allocation(&r, "cash", 0.5);
+    }
+
+    pub fn check_allocation(r: &Results, sym: &str, expected: f32) {
+        let a = r.allocations.get(sym).expect("missing symbol");
+        assert_that(a).is_close_to(expected, 0.01);
     }
 }
