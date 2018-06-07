@@ -48,7 +48,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             let to_sell = if delta.abs().gt(acct_shares) {
                 *acct_shares
             } else {
-                delta.abs()
+                delta.abs().floor()
             };
             if to_sell < 1.0 {
                 continue;
