@@ -58,7 +58,7 @@ impl Portfolio {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Account {
     name: String,
     tax_sheltered: bool,
@@ -112,6 +112,14 @@ impl Results {
         Results {
             cash: 0.0, positions: HashMap::new()
         }
+    }
+
+    fn from_positions(accounts: &Vec<Account>) -> Results {
+        let mut r = Results::new();
+        for a in accounts {
+            r.positions.insert(a.name.clone(), a.positions.clone());
+        }
+        r
     }
 }
 
