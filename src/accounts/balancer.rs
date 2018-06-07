@@ -115,7 +115,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         }
     }
 
-    results.cash = free_cash.iter().map(|(_, c)| c).sum();
+    results.cash = c!{ a.to_string() => *c, for (a, c) in free_cash.iter() };
     results.calculate_percentages(&prices);
     println!("Results after balancing: {:?}", results);
     results
@@ -153,7 +153,7 @@ mod single_account {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
 
@@ -166,7 +166,7 @@ mod single_account {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(5.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(5.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
         check_allocation(&r, "A", 0.499);
@@ -197,7 +197,7 @@ mod single_account {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
     }
@@ -209,7 +209,7 @@ mod single_account {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "B", 100.0);
     }
 
@@ -225,7 +225,7 @@ mod single_account {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "ira", "A", 500.0);
         check_shares(&r, "ira", "B", 50.0);
         check_allocation(&r, "A", 0.5);
@@ -244,7 +244,7 @@ mod single_account {
         let r = run_balancing(p);
 
         // this is overweight in A shares since there was spare cash
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 30.0);
         check_shares(&r, "taxed", "B", 2.0);
     }
@@ -280,7 +280,7 @@ mod multiple_accounts {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 480.0); // 500*$10 = $5k, 50%
         check_shares(&r, "ira", "A", 20.0);
 
@@ -308,7 +308,7 @@ mod multiple_accounts {
 
         let r = run_balancing(p);
 
-        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         // we have the needed 50% of A in the taxed account, sell extra from the ira
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "ira", "A", 0.0);

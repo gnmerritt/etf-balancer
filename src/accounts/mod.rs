@@ -105,13 +105,14 @@ impl Investment {
 pub struct Results {
     positions: HashMap<String, HashMap<String, f32>>,
     allocations: HashMap<String, f32>,
-    cash: f32
+    cash: HashMap<String, f32>,
+    total_cash: f32,
 }
 
 impl Results {
     fn new() -> Self {
         Results {
-            cash: 0.0, positions: HashMap::new(), allocations: HashMap::new()
+            total_cash: 0.0, positions: HashMap::new(), allocations: HashMap::new(), cash: HashMap::new()
         }
     }
 
@@ -133,7 +134,8 @@ impl Results {
     }
 
     fn calculate_percentages(&mut self, prices: &HashMap<&String, f32>) {
-        let mut total = self.cash;
+        self.total_cash = self.cash.iter().map(|(_, c)| c).sum();
+        let mut total = self.total_cash;
 
         for (_, positions) in self.positions.iter() {
             for (sym, shares) in positions.iter() {
@@ -150,7 +152,7 @@ impl Results {
             for (_, gross) in self.allocations.iter_mut() {
                 *gross = *gross / total;
             }
-            self.allocations.insert(String::from("cash"), self.cash / total);
+            self.allocations.insert(String::from("cash"), self.total_cash / total);
         }
     }
 }
@@ -247,7 +249,7 @@ mod test {
         r.calculate_percentages(&market); // TODO: fix type of market
         check_allocation(&r, "A", 1.0);
 
-        r.cash = 50.0;
+        r.cash.insert(String::from("a1"), 50.0);
         r.transact("a2", "A", 3.0);
         r.transact("a1", "B", 10.0);
         r.calculate_percentages(&market);
