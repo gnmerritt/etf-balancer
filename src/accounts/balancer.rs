@@ -12,6 +12,11 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     let mut shares_delta = c!{ s => d / prices.get(s).expect("missing price"),
                                for (s, d) in cash_delta };
 
+    let mut symbols_by_price = c![ (&i.symbol, i.price), for i in portfolio.market.iter() ];
+    // price descending
+    symbols_by_price.sort_by(|(_, a), (_, b)| (b.round() as i32).cmp(&(a.round() as i32)));
+    let symbols_by_price: Vec<&String> = symbols_by_price.iter().map(|(s, _)| *s).collect();
+
     let mut accounts = portfolio.accounts.to_vec();
     accounts.sort_by(|a, b| b.tax_sheltered.cmp(&a.tax_sheltered)); // sheltered accounts first
 
@@ -28,7 +33,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             continue;
         }
         println!("overweight in {}, selling {}", sym, delta);
-        let price = *prices.get(*sym).unwrap();
+        let price = *prices.get(*sym).expect("unexpected missing price");
 
         for account in accounts.iter() {
             if !account.tax_sheltered && !portfolio.can_sell_taxed() {
@@ -66,7 +71,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         let mut none_left = true;
 
         for (sym, shares) in shares_delta.iter_mut() {
-            let price = *prices.get(*sym).unwrap();
+            let price = *prices.get(*sym).expect("unexpected missing price");
 
             for account in accounts.iter() {
                 let cash = free_cash.entry(&account.name).or_insert(0.0);
@@ -84,6 +89,32 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                     .and_modify(|e| *e += 1.0)
                     .or_insert(1.0);
                 println!("acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
+            }
+        }
+
+        if !none_left {
+            continue;
+        }
+
+        // at this point we're close to our target allocations, this loop uses the spare cash
+        // by buying additional shares one at a time wherever they fit
+        for sym in symbols_by_price.iter() {
+            let price = *prices.get(*sym).expect("unexpected missing price");
+
+            for account in accounts.iter() {
+                let cash = free_cash.entry(&account.name).or_insert(0.0);
+                if price > *cash {
+                    continue;
+                }
+                none_left = false;
+
+                *cash -= price;
+                results.positions
+                    .get_mut(&account.name).expect("missing acct")
+                    .entry(sym.to_string())
+                    .and_modify(|e| *e += 1.0)
+                    .or_insert(1.0);
+                println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
             }
         }
 
@@ -199,6 +230,22 @@ mod single_account {
         assert_that(&r.cash).is_close_to(0.0, 0.1);
         check_shares(&r, "ira", "A", 500.0);
         check_shares(&r, "ira", "B", 50.0);
+    }
+
+    #[test]
+    fn minimize_spare_cash() {
+        let mut p = build_portfolio();
+        {
+            let a = p.accounts.index_mut(0);
+            a.cash = 500.0;
+        }
+
+        let r = run_balancing(p);
+
+        // this is overweight in A shares since there was spare cash
+        assert_that(&r.cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 30.0);
+        check_shares(&r, "taxed", "B", 2.0);
     }
 }
 
