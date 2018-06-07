@@ -156,7 +156,6 @@ mod single_account {
         assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
-
     }
 
     #[test]
@@ -200,6 +199,19 @@ mod single_account {
         assert_that(&r.total_cash).is_close_to(0.0, 0.1);
         check_shares(&r, "taxed", "A", 500.0);
         check_shares(&r, "taxed", "B", 50.0);
+    }
+
+    #[test]
+    fn no_fractional_sales() {
+        let mut p = build_sale_needed_portfolio();
+        p.target.insert(String::from("A"), 0.34);
+        p.target.insert(String::from("B"), 0.66);
+
+        let r = run_balancing(p);
+
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 330.0);
+        check_shares(&r, "taxed", "B", 67.0);
     }
 
     #[test]
