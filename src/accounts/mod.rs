@@ -11,7 +11,7 @@ pub struct Portfolio {
 }
 
 impl Portfolio {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Portfolio {
             target: HashMap::new(), accounts: vec!(), market: vec!(), no_taxed_sales: None
         }
@@ -59,7 +59,7 @@ impl Portfolio {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct Account {
+pub struct Account {
     name: String,
     tax_sheltered: bool,
     cash: f32,
@@ -67,7 +67,7 @@ struct Account {
 }
 
 impl Account {
-    fn new(name: &str) -> Account {
+    pub fn new(name: &str) -> Account {
         let name = name.to_owned();
         Account {
             name, tax_sheltered: false, cash: 0.0, positions: HashMap::new()
@@ -116,21 +116,40 @@ impl Results {
         }
     }
 
-    fn from_positions(accounts: &Vec<Account>) -> Results {
+    pub fn from_positions(accounts: &Vec<Account>) -> Results {
         let mut r = Results::new();
         for a in accounts {
             r.positions.insert(a.name.clone(), a.positions.clone());
+            r.cash.insert(a.name.clone(), a.cash);
         }
         r
     }
 
-    fn transact(&mut self, account: &str, symbol: &str, shares: f32) {
+    pub fn buy_maybe(&mut self, account: &str, symbol: &str, price: f32, shares: f32) -> Option<()> {
+        let cash = self.cash(account, 0.0);
+        let gross = price * shares;
+        if gross > cash {
+            return None;
+        }
+        self.cash(account, -1.0 * gross);
+        self.transact(account, symbol, shares);
+        Some(())
+    }
+
+    fn transact(&mut self, account: &str, symbol: &str, shares: f32) -> f32 {
         let account = self.positions.entry(account.to_string()).or_insert(HashMap::new());
         let current = account.entry(symbol.to_string()).or_insert(0.0);
         *current += shares;
         if *current < 0.0 {
             *current = 0.0;
         }
+        *current
+    }
+
+    fn cash(&mut self, account: &str, change: f32) -> f32 {
+        let current = self.cash.entry(account.to_string()).or_insert(0.0);
+        *current += change;
+        *current
     }
 
     fn calculate_percentages(&mut self, prices: &HashMap<&String, f32>) {

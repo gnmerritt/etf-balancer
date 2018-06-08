@@ -21,11 +21,9 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     accounts.sort_by(|a, b| b.tax_sheltered.cmp(&a.tax_sheltered)); // sheltered accounts first
 
     let mut results = Results::from_positions(&accounts);
-    let mut free_cash = c!{ &a.name => a.cash, for a in accounts.iter() };
 
     println!("Accounts before action: {:?}", results.positions);
     println!("Shares delta before action: {:?}", shares_delta);
-    println!("Free cash before action: {:?}", free_cash);
 
     // first sell shares we're overweight in
     for (sym, delta) in shares_delta.iter_mut() {
@@ -39,14 +37,10 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             if !account.tax_sheltered && !portfolio.can_sell_taxed() {
                 continue;
             }
-            // TODO: remove direct 'positions' mutation
-            let acct_shares = results.positions
-                .get_mut(&account.name).expect("missing acct")
-                .entry(sym.to_string())
-                .or_insert(0.0);
+            let acct_shares = results.transact(&account.name, sym, 0.0);
             // positive number of shares to sell
-            let to_sell = if delta.abs().gt(acct_shares) {
-                *acct_shares
+            let to_sell = if delta.abs().gt(&acct_shares) {
+                acct_shares
             } else {
                 delta.abs().floor()
             };
@@ -54,37 +48,38 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 continue;
             }
 
-            let change = price * to_sell;
-            free_cash.entry(&account.name)
-                .and_modify(|c| *c += change)
-                .or_insert(change);
-            *acct_shares -= to_sell;
-            *delta += to_sell;
-            println!("In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
-                account.name, to_sell, sym, price, free_cash, delta);
+            match results.buy_maybe(&account.name, sym, price, -1.0 * to_sell) {
+                Some(_) => {
+                    *delta += to_sell;
+                    println!("In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
+                        account.name, to_sell, sym, price, &results.cash, delta);
+                },
+                _ => ()
+            }
         }
     }
 
-    println!("Results after sale of overweight positions: r={:?}, fc={:?}", results, free_cash);
+    println!("Results after sale of overweight positions: r={:?}", results);
 
-    // buy some of each share we need more of
     loop {
         let mut none_left = true;
 
+        // buy some of each share we need more of
         for (sym, shares) in shares_delta.iter_mut() {
             let price = *prices.get(*sym).expect("unexpected missing price");
 
             for account in accounts.iter() {
-                let cash = free_cash.entry(&account.name).or_insert(0.0);
-                if *shares < 1.0 || price > *cash {
+                if *shares < 1.0 {
                     continue;
                 }
-                none_left = false;
-
-                *cash -= price;
-                *shares -= 1.0;
-                results.transact(&account.name, sym, 1.0);
-                println!("acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
+                match results.buy_maybe(&account.name, sym, price, 1.0) {
+                    Some(_) => {
+                        none_left = false;
+                        *shares -= 1.0;
+                        println!("acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                    }
+                    _ => ()
+                }
             }
         }
 
@@ -98,15 +93,14 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             let price = *prices.get(*sym).expect("unexpected missing price");
 
             for account in accounts.iter() {
-                let cash = free_cash.entry(&account.name).or_insert(0.0);
-                if price > *cash {
-                    continue;
+                match results.buy_maybe(&account.name, sym, price, 1.0) {
+                    Some(_) => {
+                        none_left = false;
+                        println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                        break;
+                    }
+                    _ => ()
                 }
-                none_left = false;
-
-                *cash -= price;
-                results.transact(&account.name, sym, 1.0);
-                println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, cash);
             }
         }
 
@@ -115,7 +109,6 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         }
     }
 
-    results.cash = c!{ a.to_string() => *c, for (a, c) in free_cash.iter() };
     results.calculate_percentages(&prices);
     println!("Results after balancing: {:?}", results);
     results
