@@ -1,11 +1,13 @@
+use stats::median;
 use super::*;
 
 pub fn run_balancing(portfolio: Portfolio) -> Results {
     let total_value = portfolio.total_value();
-    let prices = c!{ &i.symbol => i.price, for i in portfolio.market.iter() };
     let allocations = c!{ s => w * total_value, for (s, w) in portfolio.target.iter() };
     let total_shares = portfolio.total_shares();
     // Portfolio::validate has already checked for the necessary prices
+    let prices = c!{ &i.symbol => i.price, for i in portfolio.market.iter() };
+    let yields = c!{ &i.symbol => i.div_yield.unwrap_or(0.0), for i in portfolio.market.iter() };
     let cash_delta = c!{ s => a - total_shares.get(s).unwrap_or(&0.0) * prices.get(s).unwrap(),
                          for (s, a) in allocations };
 
@@ -17,6 +19,8 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     symbols_by_price.sort_by(|(_, a), (_, b)| (b.round() as i32).cmp(&(a.round() as i32)));
     let symbols_by_price: Vec<&String> = symbols_by_price.iter().map(|(s, _)| *s).collect();
 
+    let median_yield = median(portfolio.market.iter().map(|i| i.div_yield.unwrap_or(0.0)));
+
     let mut accounts = portfolio.accounts.to_vec();
     accounts.sort_by(|a, b| b.tax_sheltered.cmp(&a.tax_sheltered)); // sheltered accounts first
 
@@ -24,6 +28,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
     println!("Accounts before action: {:?}", results.positions);
     println!("Shares delta before action: {:?}", shares_delta);
+    println!("Median yield={:?}, yields={:?}", median_yield, yields);
 
     // first sell shares we're overweight in
     for (sym, delta) in shares_delta.iter_mut() {
@@ -64,14 +69,49 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     loop {
         let mut none_left = true;
 
-        // buy some of each share we need more of
+        // first allocate new 'high yield' shares into tax-sheltered accounts
         for (sym, shares) in shares_delta.iter_mut() {
+            if *shares < 1.0 {
+                continue;
+            }
+            match yields.get(*sym) {
+                Some(div_yield) =>
+                    match median_yield {
+                        Some(median) if *div_yield as f64 > median => (), // success!
+                        _ => continue
+                    }
+                _ => continue
+            }
+            // if we got here the fund is higher-than-median yield
             let price = *prices.get(*sym).expect("unexpected missing price");
 
             for account in accounts.iter() {
-                if *shares < 1.0 {
+                if !account.tax_sheltered {
                     continue;
                 }
+                match results.buy_maybe(&account.name, sym, price, 1.0) {
+                    Some(_) => {
+                        none_left = false;
+                        *shares -= 1.0;
+                        println!("high-yield: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                    }
+                    _ => ()
+                }
+            }
+        }
+
+        if !none_left {
+            continue;
+        }
+
+        // buy some of each share we need more of
+        for (sym, shares) in shares_delta.iter_mut() {
+            if *shares < 1.0 {
+                continue;
+            }
+            let price = *prices.get(*sym).expect("unexpected missing price");
+
+            for account in accounts.iter() {
                 match results.buy_maybe(&account.name, sym, price, 1.0) {
                     Some(_) => {
                         none_left = false;
@@ -97,7 +137,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                     Some(_) => {
                         none_left = false;
                         println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
-                        break;
+                        break; // we found an account to hold the extra share, move on to next fund
                     }
                     _ => ()
                 }
@@ -320,5 +360,24 @@ mod multiple_accounts {
 
         check_shares(&r, "taxed", "B", 0.0);
         check_shares(&r, "ira", "B", 50.0);
+    }
+
+    #[test]
+    fn high_yield_tax_sheltered() {
+        let mut p = build_multi_portfolio();
+        p.market.index_mut(0).div_yield = Some(0.04); // A
+        p.market.index_mut(1).div_yield = Some(0.01); // B
+
+        let r = run_balancing(p);
+
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 300.0);
+        check_shares(&r, "ira", "A", 200.0);
+
+        check_shares(&r, "taxed", "B", 50.0);
+        check_shares(&r, "ira", "B", 0.0); // IRA ends up entirely holding high-yield
+
+        check_allocation(&r, "A", 0.5);
+        check_allocation(&r, "B", 0.5);
     }
 }
