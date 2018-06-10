@@ -4,7 +4,16 @@
 
 Try and optimally balance an account of Vanguard ETFs given a target allocation. Runs as an API for easy use from google sheets.
 
-## usage:
+## features
+
+Balances funds to a target percentage across multiple accounts.
+
+   * high-yield funds prioritized to tax-sheltered accounts
+   * can avoid sales in taxable accounts
+   * minimizes uninvested cash in each account
+   * spreadsheet auto-updates to graph returns and balances over time
+
+## CLI usage:
 
 Describe your target allocation, your accounts and provide current market quotes
 for the funds you're interested in balancing, something like this (via the
@@ -14,59 +23,10 @@ excellent [httpie](https://httpie.org/)):
 http POST etf.gnmerritt.net/balance target:='{"VEU":0.7,"VOO":0.3}' accounts:='[{"name":"taxed", "tax_sheltered":false,"cash":1000, "positions":{"VEU":2, "VOO":2}}]' market:='[{"symbol":"VEU", "price":54.33},{"symbol":"VOO", "price":254.77}]'
 ```
 
-## Given info
-```
-symbols:   [world, mid cap, reit, 500, small cap, bond]
-desired %: [25,    10,      5,    35,  10,        15]
-current $: []
-yield %:   [2.6,   1.3,     4.4,  1.7, 1.2,       2.6]
-```
+## spreadsheet usage:
 
-shares-per-account: []
+I talk to the API via a google sheet which contains my account info, you can find a template here: [Google Sheet Template](https://docs.google.com/spreadsheets/d/1o8sxqQx-XOBXjGqna-EQ-8smx7PInTiPLUEc6tUZhr4/edit?usp=sharing). If you make yourself a copy you can start using it to balance your own accounts.
 
-free cash per account (roth, ira, taxed)
+![dashboard](./spreadsheet/dashboard.png)
 
-total funds = sum(free cash) + sum(invested)
-
-delta $ per ETF: [desired - invested foreach ETF]
-
-delta shares per ETF: [delta/share price foreach ETF]
-
-## ideas for allocation
-   * put higher yield ETFs into tax-advantaged accts
-   * keep most rebalancing in tax-advantaged accts
-      * this means some of each fund needs to be tax sheltered
-   * do as little as possible (minimize # transactions from current state)
-
-assign primary allocations:
-
-```
-15% roth    -> bond, 1/2 reit
-30% ira     -> foreign, 1/2 reit
-55% taxable -> us small, us mid, 500
-```
-
-10% of each account should mirror portfolio, to ease rebalancing
-   * TODO: how to test this over time?
-
-## Iterative algorithm
-
-```
-for each ETF:
-   if we're overweight, sell shares
-      - from a sheltered account first
-      - TODO: when okay to sell from taxable account?
-
-for each account:
-    make sure that there's at least 10% * desired % of each ETF
-     -only buy shares if there's: free cash && we need shares
-
-for each primary allocation:
-    buy shares in acct until one of
-       - we don't need more
-       - account has no more free cash
-
-for each share we still need more of, sorted by yield:
-   fill tax advantaged accounts with shares
-   fill taxable accounts
-```
+![accounts](./spreadsheet/accounts.png)
