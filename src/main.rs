@@ -5,7 +5,9 @@ use etf_balancer::run_balancing;
 use etf_balancer::accounts::Portfolio;
 
 fn index(_req: HttpRequest) -> impl Responder {
-    "Hello, rust"
+    HttpResponse::TemporaryRedirect()
+        .header("Location", "https://github.com/gnmerritt/etf-balancer")
+        .finish()
 }
 
 fn balance(accounts: Json<Portfolio>) -> impl Responder {
