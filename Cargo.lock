@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "etf_balancer"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "actix-web 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "cute 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
