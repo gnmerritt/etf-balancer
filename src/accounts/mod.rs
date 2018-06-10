@@ -87,14 +87,14 @@ impl Account {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct Investment {
+pub struct Investment {
     symbol: String,
     price: f32,
     div_yield: Option<f32>
 }
 
 impl Investment {
-    fn new(symbol: &str, price: f32) -> Investment {
+    pub fn new(symbol: &str, price: f32) -> Investment {
         Investment {
             symbol: symbol.to_owned(), price, div_yield: None
         }

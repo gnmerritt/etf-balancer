@@ -3,13 +3,15 @@ name = "etf_balancer"
 description = "Balance a portfolio of ETFs across multiple accounts"
 readme = "README.md"
 repository = "https://github.com/gnmerritt/etf-balancer"
-travis-ci = { repository = "gnmerritt/etf-balancer", branch = "master" }
 license = "MIT"
 version = "1.0.0"
 authors = ["Nathan Merritt <gnm@the-merritts.net>"]
 exclude = [
     "spreadsheet/*"
 ]
+
+[badges]
+travis-ci = { repository = "gnmerritt/etf-balancer", branch = "master" }
 
 [dependencies]
 actix-web = "0.6.10"
