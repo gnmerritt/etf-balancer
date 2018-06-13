@@ -20,7 +20,7 @@ for the funds you're interested in balancing, something like this (via the
 excellent [httpie](https://httpie.org/)):
 
 ```bash
-http POST etf.gnmerritt.net/balance target:='{"VEU":0.7,"VOO":0.3}' accounts:='[{"name":"taxed", "tax_sheltered":false,"cash":1000, "positions":{"VEU":2, "VOO":2}}]' market:='[{"symbol":"VEU", "price":54.33},{"symbol":"VOO", "price":254.77}]'
+http POST https://etf.gnmerritt.net/balance target:='{"VEU":0.7,"VOO":0.3}' accounts:='[{"name":"taxed", "tax_sheltered":false,"cash":1000, "positions":{"VEU":2, "VOO":2}}]' market:='[{"symbol":"VEU", "price":54.33},{"symbol":"VOO", "price":254.77}]'
 ```
 
 ## spreadsheet usage:
