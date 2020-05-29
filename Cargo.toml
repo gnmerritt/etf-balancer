@@ -9,12 +9,14 @@ authors = ["Nathan Merritt <gnm@the-merritts.net>"]
 exclude = [
     "spreadsheet/*"
 ]
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "gnmerritt/etf-balancer", branch = "master" }
 
 [dependencies]
-actix-web = "0.6.10"
+actix-rt = "1"
+actix-web = "3.0.0-alpha.3"
 cute = "0.3.0"
 serde = "1.0"
 serde_derive = "1.0"

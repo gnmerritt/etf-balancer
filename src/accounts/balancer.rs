@@ -1,18 +1,18 @@
-use stats::median;
 use super::*;
+use stats::median;
 
 pub fn run_balancing(portfolio: Portfolio) -> Results {
     let total_value = portfolio.total_value();
-    let allocations = c!{ s => w * total_value, for (s, w) in portfolio.target.iter() };
+    let allocations = c! { s => w * total_value, for (s, w) in portfolio.target.iter() };
     let total_shares = portfolio.total_shares();
     // Portfolio::validate has already checked for the necessary prices
-    let prices = c!{ &i.symbol => i.price, for i in portfolio.market.iter() };
-    let yields = c!{ &i.symbol => i.div_yield.unwrap_or(0.0), for i in portfolio.market.iter() };
-    let cash_delta = c!{ s => a - total_shares.get(s).unwrap_or(&0.0) * prices.get(s).unwrap(),
-                         for (s, a) in allocations };
+    let prices = c! { &i.symbol => i.price, for i in portfolio.market.iter() };
+    let yields = c! { &i.symbol => i.div_yield.unwrap_or(0.0), for i in portfolio.market.iter() };
+    let cash_delta = c! { s => a - total_shares.get(s).unwrap_or(&0.0) * prices.get(s).unwrap(),
+    for (s, a) in allocations };
 
-    let mut shares_delta = c!{ s => d / prices.get(s).expect("missing price"),
-                               for (s, d) in cash_delta };
+    let mut shares_delta = c! { s => d / prices.get(s).expect("missing price"),
+    for (s, d) in cash_delta };
 
     let mut symbols_by_price = c![ (&i.symbol, i.price), for i in portfolio.market.iter() ];
     // price descending
@@ -56,15 +56,20 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             match results.buy_maybe(&account.name, sym, price, -1.0 * to_sell) {
                 Some(_) => {
                     *delta += to_sell;
-                    println!("In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
-                        account.name, to_sell, sym, price, &results.cash, delta);
-                },
-                _ => ()
+                    println!(
+                        "In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
+                        account.name, to_sell, sym, price, &results.cash, delta
+                    );
+                }
+                _ => (),
             }
         }
     }
 
-    println!("Results after sale of overweight positions: r={:?}", results);
+    println!(
+        "Results after sale of overweight positions: r={:?}",
+        results
+    );
 
     loop {
         let mut none_left = true;
@@ -75,12 +80,11 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 continue;
             }
             match yields.get(*sym) {
-                Some(div_yield) =>
-                    match median_yield {
-                        Some(median) if *div_yield as f64 > median => (), // success!
-                        _ => continue
-                    }
-                _ => continue
+                Some(div_yield) => match median_yield {
+                    Some(median) if *div_yield as f64 > median => (), // success!
+                    _ => continue,
+                },
+                _ => continue,
             }
             // if we got here the fund is higher-than-median yield
             let price = *prices.get(*sym).expect("unexpected missing price");
@@ -93,9 +97,12 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                     Some(_) => {
                         none_left = false;
                         *shares -= 1.0;
-                        println!("high-yield: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                        println!(
+                            "high-yield: acct={}, bought {}@{}, fc={:?}",
+                            account.name, sym, price, results.cash
+                        );
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         }
@@ -116,9 +123,12 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                     Some(_) => {
                         none_left = false;
                         *shares -= 1.0;
-                        println!("acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                        println!(
+                            "acct={}, bought {}@{}, fc={:?}",
+                            account.name, sym, price, results.cash
+                        );
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         }
@@ -136,10 +146,13 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 match results.buy_maybe(&account.name, sym, price, 1.0) {
                     Some(_) => {
                         none_left = false;
-                        println!("extra: acct={}, bought {}@{}, fc={:?}", account.name, sym, price, results.cash);
+                        println!(
+                            "extra: acct={}, bought {}@{}, fc={:?}",
+                            account.name, sym, price, results.cash
+                        );
                         break; // we found an account to hold the extra share, move on to next fund
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         }
@@ -156,10 +169,10 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
 #[cfg(test)]
 mod single_account {
-    use std::ops::IndexMut;
-    use spectral::prelude::*;
-    use super::*;
     use super::test::check_allocation;
+    use super::*;
+    use spectral::prelude::*;
+    use std::ops::IndexMut;
 
     #[test]
     fn check_empty_case() {
@@ -297,11 +310,11 @@ mod single_account {
 
 #[cfg(test)]
 mod multiple_accounts {
-    use std::ops::IndexMut;
-    use spectral::prelude::*;
-    use super::*;
     use super::single_account::check_shares;
     use super::test::check_allocation;
+    use super::*;
+    use spectral::prelude::*;
+    use std::ops::IndexMut;
 
     fn build_multi_portfolio() -> Portfolio {
         let mut p = Portfolio::new();

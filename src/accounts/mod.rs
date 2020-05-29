@@ -13,7 +13,10 @@ pub struct Portfolio {
 impl Portfolio {
     pub fn new() -> Self {
         Portfolio {
-            target: HashMap::new(), accounts: vec!(), market: vec!(), no_taxed_sales: None
+            target: HashMap::new(),
+            accounts: vec![],
+            market: vec![],
+            no_taxed_sales: None,
         }
     }
 
@@ -21,22 +24,34 @@ impl Portfolio {
         // make sure the requested allocations add up to 1 (100%)
         let sum: f32 = self.target.iter().map(|(_, p)| p).sum();
         if (sum - 1.0).abs() > 0.01 {
-            return Some("Allocations must add up to 1.0")
+            return Some("Allocations must add up to 1.0");
         }
         // make sure we were given price info for all allocated and owned stocks
         let prices: HashSet<&String> = self.market.iter().map(|i| &i.symbol).collect();
         let shares = self.total_shares();
-        let missing_owned = shares.iter().map(|(s, _)| s).filter(|s| !prices.contains(s)).count();
-        let missing_allocated = self.target.iter().map(|(s, _)| s).filter(|s| !prices.contains(s)).count();
+        let missing_owned = shares
+            .iter()
+            .map(|(s, _)| s)
+            .filter(|s| !prices.contains(s))
+            .count();
+        let missing_allocated = self
+            .target
+            .iter()
+            .map(|(s, _)| s)
+            .filter(|s| !prices.contains(s))
+            .count();
         if missing_allocated > 0 || missing_owned > 0 {
-            return Some("Missing prices for some investments") // TODO: format this?
+            return Some("Missing prices for some investments"); // TODO: format this?
         }
 
         None
     }
 
     fn total_value(&self) -> f32 {
-        self.accounts.iter().map(|a| a.value(&self.market)).sum::<f32>()
+        self.accounts
+            .iter()
+            .map(|a| a.value(&self.market))
+            .sum::<f32>()
     }
 
     fn total_shares(&self) -> HashMap<String, f32> {
@@ -51,7 +66,7 @@ impl Portfolio {
     }
 
     fn can_sell_taxed(&self) -> bool {
-        match self.no_taxed_sales  {
+        match self.no_taxed_sales {
             Some(no_sales) => !no_sales,
             None => true,
         }
@@ -63,26 +78,32 @@ pub struct Account {
     name: String,
     tax_sheltered: bool,
     cash: f32,
-    positions: HashMap<String, f32>
+    positions: HashMap<String, f32>,
 }
 
 impl Account {
     pub fn new(name: &str) -> Account {
         let name = name.to_owned();
         Account {
-            name, tax_sheltered: false, cash: 0.0, positions: HashMap::new()
+            name,
+            tax_sheltered: false,
+            cash: 0.0,
+            positions: HashMap::new(),
         }
     }
 
     fn value(&self, market: &Vec<Investment>) -> f32 {
-        self.cash + self.positions.iter()
-            .map(|(sym, pos)| {
-                match market.iter().find(|i| &i.symbol == sym) {
-                    Some(info) => pos * info.price,
-                    None => 0.0
-                }
-            })
-            .sum::<f32>()
+        self.cash
+            + self
+                .positions
+                .iter()
+                .map(
+                    |(sym, pos)| match market.iter().find(|i| &i.symbol == sym) {
+                        Some(info) => pos * info.price,
+                        None => 0.0,
+                    },
+                )
+                .sum::<f32>()
     }
 }
 
@@ -90,13 +111,15 @@ impl Account {
 pub struct Investment {
     symbol: String,
     price: f32,
-    div_yield: Option<f32>
+    div_yield: Option<f32>,
 }
 
 impl Investment {
     pub fn new(symbol: &str, price: f32) -> Investment {
         Investment {
-            symbol: symbol.to_owned(), price, div_yield: None
+            symbol: symbol.to_owned(),
+            price,
+            div_yield: None,
         }
     }
 }
@@ -112,7 +135,10 @@ pub struct Results {
 impl Results {
     fn new() -> Self {
         Results {
-            total_cash: 0.0, positions: HashMap::new(), allocations: HashMap::new(), cash: HashMap::new()
+            total_cash: 0.0,
+            positions: HashMap::new(),
+            allocations: HashMap::new(),
+            cash: HashMap::new(),
         }
     }
 
@@ -125,7 +151,13 @@ impl Results {
         r
     }
 
-    pub fn buy_maybe(&mut self, account: &str, symbol: &str, price: f32, shares: f32) -> Option<()> {
+    pub fn buy_maybe(
+        &mut self,
+        account: &str,
+        symbol: &str,
+        price: f32,
+        shares: f32,
+    ) -> Option<()> {
         let cash = self.cash(account, 0.0);
         let gross = price * shares;
         if gross > cash {
@@ -137,7 +169,10 @@ impl Results {
     }
 
     fn transact(&mut self, account: &str, symbol: &str, shares: f32) -> f32 {
-        let account = self.positions.entry(account.to_string()).or_insert(HashMap::new());
+        let account = self
+            .positions
+            .entry(account.to_string())
+            .or_insert(HashMap::new());
         let current = account.entry(symbol.to_string()).or_insert(0.0);
         *current += shares;
         if *current < 0.0 {
@@ -161,7 +196,8 @@ impl Results {
                 let price = *prices.get(sym).expect("unexpected missing price");
                 let gross = price * shares;
                 total += gross;
-                self.allocations.entry(sym.to_string())
+                self.allocations
+                    .entry(sym.to_string())
                     .and_modify(|g| *g += gross)
                     .or_insert(gross);
             }
@@ -171,15 +207,16 @@ impl Results {
             for (_, gross) in self.allocations.iter_mut() {
                 *gross = *gross / total;
             }
-            self.allocations.insert(String::from("cash"), self.total_cash / total);
+            self.allocations
+                .insert(String::from("cash"), self.total_cash / total);
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use spectral::prelude::*;
     use super::*;
+    use spectral::prelude::*;
 
     #[test]
     fn test_portfolio_validation_alloc() {
@@ -240,14 +277,14 @@ mod test {
 
     #[test]
     fn test_account_value() {
-        let market = vec!();
+        let market = vec![];
         let mut account = Account::new("a");
         assert_eq!(account.value(&market), 0.0);
 
         account.cash = 1.0;
         assert_eq!(account.value(&market), account.cash);
 
-        let market = vec!(Investment::new("VEU", 10.0), Investment::new("BD", 100.0));
+        let market = vec![Investment::new("VEU", 10.0), Investment::new("BD", 100.0)];
         account.positions.insert("VEU".to_string(), 3.0);
         account.positions.insert("BD".to_string(), 1.0);
         account.positions.insert("NO-PRICE".to_string(), 5.0);

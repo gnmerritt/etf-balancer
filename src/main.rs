@@ -1,29 +1,26 @@
-extern crate actix_web;
-use actix_web::{server, App, Json, http, HttpRequest, HttpResponse, Responder};
-extern crate etf_balancer;
-use etf_balancer::run_balancing;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use etf_balancer::accounts::Portfolio;
+use etf_balancer::run_balancing;
 
-fn index(_req: HttpRequest) -> impl Responder {
+#[get("/")]
+async fn index() -> impl Responder {
     HttpResponse::TemporaryRedirect()
         .header("Location", "https://github.com/gnmerritt/etf-balancer")
         .finish()
 }
 
-fn balance(accounts: Json<Portfolio>) -> impl Responder {
+#[post("/balance")]
+async fn balance(accounts: web::Json<Portfolio>) -> impl Responder {
     match accounts.validate() {
         None => HttpResponse::Ok().json(run_balancing(accounts.into_inner())),
-        Some(err) => HttpResponse::BadRequest().json(err)
+        Some(err) => HttpResponse::BadRequest().json(err),
     }
 }
 
-fn main() {
-    server::new(|| {
-        App::new()
-            .resource("/", |r| r.f(index))
-            .resource("/balance", |r| r.method(http::Method::POST).with(balance))
-    })
-    .bind("127.0.0.1:8000")
-    .expect("Can not bind to port 8000")
-    .run();
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| App::new().service(index).service(balance))
+        .bind("127.0.0.1:8000")?
+        .run()
+        .await
 }
