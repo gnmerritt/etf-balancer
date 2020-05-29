@@ -8,6 +8,7 @@ pub struct Portfolio {
     accounts: Vec<Account>,
     market: Vec<Investment>,
     no_taxed_sales: Option<bool>, // defaults to allowing sales
+    no_sale_accounts: HashSet<String>,
 }
 
 impl Portfolio {
@@ -17,6 +18,7 @@ impl Portfolio {
             accounts: vec![],
             market: vec![],
             no_taxed_sales: None,
+            no_sale_accounts: HashSet::new(),
         }
     }
 

@@ -27,6 +27,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     let mut results = Results::from_positions(&accounts);
 
     println!("Accounts before action: {:?}", results.positions);
+    println!("   disallowing sales: {:?}", &portfolio.no_sale_accounts);
     println!("Shares delta before action: {:?}", shares_delta);
     println!("Median yield={:?}, yields={:?}", median_yield, yields);
 
@@ -40,6 +41,9 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
         for account in accounts.iter() {
             if !account.tax_sheltered && !portfolio.can_sell_taxed() {
+                continue;
+            }
+            if portfolio.no_sale_accounts.contains(&account.name) {
                 continue;
             }
             let acct_shares = results.transact(&account.name, sym, 0.0);
@@ -264,6 +268,17 @@ mod single_account {
     fn no_taxed_sales_allowed() {
         let mut p = build_sale_needed_portfolio();
         p.no_taxed_sales = Some(true);
+
+        let r = run_balancing(p);
+
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "B", 100.0);
+    }
+
+    #[test]
+    fn no_sales_allowed() {
+        let mut p = build_sale_needed_portfolio();
+        p.no_sale_accounts.insert(String::from("taxed"));
 
         let r = run_balancing(p);
 
