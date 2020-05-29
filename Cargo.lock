@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "etf_balancer"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "actix-rt",
  "actix-web",

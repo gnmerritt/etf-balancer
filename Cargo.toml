@@ -4,7 +4,7 @@ description = "Balance a portfolio of ETFs across multiple accounts"
 readme = "README.md"
 repository = "https://github.com/gnmerritt/etf-balancer"
 license = "MIT"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Nathan Merritt <gnm@the-merritts.net>"]
 exclude = [
     "spreadsheet/*"
