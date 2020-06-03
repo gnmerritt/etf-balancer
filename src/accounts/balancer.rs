@@ -1,5 +1,33 @@
 use super::*;
 use stats::median;
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+
+#[derive(Debug)]
+struct Needed {
+    symbol: String,
+    cash_delta: f32,
+}
+
+impl Eq for Needed {}
+
+impl PartialOrd for Needed {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.cash_delta.partial_cmp(&other.cash_delta)
+    }
+}
+
+impl Ord for Needed {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl PartialEq for Needed {
+    fn eq(&self, other: &Self) -> bool {
+        self.cash_delta == other.cash_delta
+    }
+}
 
 pub fn run_balancing(portfolio: Portfolio) -> Results {
     let total_value = portfolio.total_value();
@@ -12,7 +40,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     for (s, a) in allocations };
 
     let mut shares_delta = c! { s => d / prices.get(s).expect("missing price"),
-    for (s, d) in cash_delta };
+    for (s, d) in &cash_delta };
 
     let mut symbols_by_price = c![ (&i.symbol, i.price), for i in portfolio.market.iter() ];
     // price descending
@@ -23,6 +51,11 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
     let mut accounts = portfolio.accounts.to_vec();
     accounts.sort_by(|a, b| b.tax_sheltered.cmp(&a.tax_sheltered)); // sheltered accounts first
+    let taxable_first = {
+        let mut a = accounts.clone();
+        a.reverse();
+        a
+    };
 
     let mut results = Results::from_positions(&accounts);
 
@@ -57,15 +90,12 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 continue;
             }
 
-            match results.buy_maybe(&account.name, sym, price, -1.0 * to_sell) {
-                Some(_) => {
-                    *delta += to_sell;
-                    println!(
-                        "In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
-                        account.name, to_sell, sym, price, &results.cash, delta
-                    );
-                }
-                _ => (),
+            if let Some(_) = results.buy_maybe(&account.name, sym, price, -1.0 * to_sell) {
+                *delta += to_sell;
+                println!(
+                    "In acct={} sold {} x {}@{}, fc={:?}. Remaining delta={}",
+                    account.name, to_sell, sym, price, &results.cash, delta
+                );
             }
         }
     }
@@ -75,81 +105,93 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         results
     );
 
+    // now prepare to buy shares, in the order in which they're most needed
+    println!("cash delta before buys: {:?}", &cash_delta);
+    let mut needed_funds = BinaryHeap::new();
+    for (sym, value_needed) in cash_delta.into_iter() {
+        needed_funds.push(Needed {
+            symbol: sym.clone(),
+            cash_delta: value_needed,
+        });
+    }
+
+    println!("needed heap before start: {:?}", needed_funds);
+
     loop {
-        let mut none_left = true;
-
-        // first allocate new 'high yield' shares into tax-sheltered accounts
-        for (sym, shares) in shares_delta.iter_mut() {
-            if *shares < 1.0 {
-                continue;
-            }
-            match yields.get(*sym) {
-                Some(div_yield) => match median_yield {
-                    Some(median) if *div_yield as f64 > median => (), // success!
-                    _ => continue,
-                },
-                _ => continue,
-            }
-            // if we got here the fund is higher-than-median yield
-            let price = *prices.get(*sym).expect("unexpected missing price");
-
-            for account in accounts.iter() {
-                if !account.tax_sheltered {
-                    continue;
-                }
-                match results.buy_maybe(&account.name, sym, price, 1.0) {
-                    Some(_) => {
-                        none_left = false;
-                        *shares -= 1.0;
-                        println!(
-                            "high-yield: acct={}, bought {}@{}, fc={:?}",
-                            account.name, sym, price, results.cash
-                        );
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        if !none_left {
+        let next = match needed_funds.pop() {
+            Some(n) => n,
+            None => break,
+        };
+        let symbol = &next.symbol;
+        let price = *prices.get(symbol).expect("unexpected missing price");
+        let shares = next.cash_delta / price;
+        if shares < 1.0 {
             continue;
         }
 
-        // buy some of each share we need more of
-        for (sym, shares) in shares_delta.iter_mut() {
-            if *shares < 1.0 {
-                continue;
-            }
-            let price = *prices.get(*sym).expect("unexpected missing price");
+        let mut bought = false;
 
-            for account in accounts.iter() {
-                match results.buy_maybe(&account.name, sym, price, 1.0) {
-                    Some(_) => {
-                        none_left = false;
-                        *shares -= 1.0;
-                        println!(
-                            "acct={}, bought {}@{}, fc={:?}",
-                            account.name, sym, price, results.cash
-                        );
-                    }
-                    _ => (),
+        // if the fund is 'high yield', try to allocate into a tax-sheltered account
+        let is_high_yield = match yields.get(symbol) {
+            Some(div_yield) => match median_yield {
+                Some(median) if *div_yield as f64 > median => true, // success!
+                _ => false,
+            },
+            _ => false,
+        };
+        if is_high_yield {
+            for account in accounts.iter().filter(|a| a.tax_sheltered) {
+                if let Some(_) = results.buy_maybe(&account.name, symbol, price, 1.0) {
+                    bought = true;
+                    println!(
+                        "high-yield: acct={}, bought {}@{}, fc={:?}",
+                        account.name, symbol, price, results.cash
+                    );
+                    break;
+                }
+            }
+        }
+        // otherwise just try to put it into the first account it fits into
+        if !bought {
+            // don't check the tax-sheltered accounts again if we already have
+            for account in taxable_first
+                .iter()
+                .filter(|a| !is_high_yield || !a.tax_sheltered)
+            {
+                if let Some(_) = results.buy_maybe(&account.name, symbol, price, 1.0) {
+                    bought = true;
+                    println!(
+                        "acct={}, bought {}@{}, fc={:?}",
+                        account.name, symbol, price, results.cash
+                    );
+                    break;
                 }
             }
         }
 
-        if !none_left {
-            continue;
+        if bought {
+            let new_needed = next.cash_delta - price;
+            if new_needed > price {
+                needed_funds.push(Needed {
+                    symbol: next.symbol,
+                    cash_delta: new_needed,
+                });
+            }
         }
+    }
 
-        // at this point we're close to our target allocations, this loop uses the spare cash
-        // by buying additional shares one at a time wherever they fit
+    // at this point we're close to our target allocations, this loop uses the spare cash
+    // by buying additional shares one at a time wherever they fit
+    loop {
+        let mut bought = false;
+
         for sym in symbols_by_price.iter() {
             let price = *prices.get(*sym).expect("unexpected missing price");
 
             for account in accounts.iter() {
                 match results.buy_maybe(&account.name, sym, price, 1.0) {
                     Some(_) => {
-                        none_left = false;
+                        bought = true;
                         println!(
                             "extra: acct={}, bought {}@{}, fc={:?}",
                             account.name, sym, price, results.cash
@@ -161,7 +203,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
             }
         }
 
-        if none_left {
+        if !bought {
             break;
         }
     }
@@ -321,6 +363,37 @@ mod single_account {
         check_shares(&r, "taxed", "A", 30.0);
         check_shares(&r, "taxed", "B", 2.0);
     }
+
+    #[test]
+    fn buys_most_needed_first() {
+        let mut p = Portfolio::new();
+        let mut acct = Account::new("taxed");
+        acct.cash = 20.0; // not enough cash to fully balance
+        acct.positions.insert(String::from("A"), 55.0);
+        acct.positions.insert(String::from("B"), 25.0);
+        acct.positions.insert(String::from("C"), 0.0);
+        p.accounts.push(acct);
+        p.no_sale_accounts.insert(String::from("taxed"));
+        p.target.insert(String::from("A"), 0.33);
+        p.target.insert(String::from("B"), 0.33);
+        p.target.insert(String::from("C"), 0.34);
+
+        p.market.push(Investment::new("A", 1.0));
+        p.market.push(Investment::new("B", 1.0));
+        p.market.push(Investment::new("C", 1.0));
+
+        assert_that(&p.total_value()).is_close_to(100.0, 0.1);
+
+        let r = run_balancing(p);
+
+        // total value is 100, so an even balance would be ~33 each
+        // but we can't get to that because too much A and no sales allowed
+        // make sure we don't buy any B because we need C more
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 55.0);
+        check_shares(&r, "taxed", "B", 25.0);
+        check_shares(&r, "taxed", "C", 20.0);
+    }
 }
 
 #[cfg(test)]
@@ -350,15 +423,16 @@ mod multiple_accounts {
     #[test]
     fn test_simple_multi() {
         let p = build_multi_portfolio();
+        assert_that(&p.total_value()).is_close_to(10_000.0, 1.0);
 
         let r = run_balancing(p);
 
         assert_that(&r.total_cash).is_close_to(0.0, 0.1);
-        check_shares(&r, "taxed", "A", 480.0); // 500*$10 = $5k, 50%
-        check_shares(&r, "ira", "A", 20.0);
+        check_shares(&r, "taxed", "A", 400.0); // 400*$10 = $4k, 50%
+        check_shares(&r, "ira", "A", 100.0);
 
-        check_shares(&r, "taxed", "B", 32.0); // 50*$100 = $5k, 50%
-        check_shares(&r, "ira", "B", 18.0);
+        check_shares(&r, "taxed", "B", 40.0); // 40*$100 = $4k, 50%
+        check_shares(&r, "ira", "B", 10.0);
 
         check_allocation(&r, "A", 0.5);
         check_allocation(&r, "B", 0.5);

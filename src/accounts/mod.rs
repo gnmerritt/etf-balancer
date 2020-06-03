@@ -159,7 +159,7 @@ impl Results {
         symbol: &str,
         price: f32,
         shares: f32,
-    ) -> Option<()> {
+    ) -> Option<f32> {
         let cash = self.cash(account, 0.0);
         let gross = price * shares;
         if gross > cash {
@@ -167,7 +167,7 @@ impl Results {
         }
         self.cash(account, -1.0 * gross);
         self.transact(account, symbol, shares);
-        Some(())
+        Some(gross)
     }
 
     fn transact(&mut self, account: &str, symbol: &str, shares: f32) -> f32 {
