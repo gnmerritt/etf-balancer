@@ -312,13 +312,13 @@ mod test {
         r.transact("a1", "B", 10.0);
         r.calculate_percentages(&market);
 
-        check_allocation(&r, "A", 0.4);
+        check_allocation(&r, "A", 0.41);
         check_allocation(&r, "B", 0.1);
         check_allocation(&r, "cash", 0.5);
     }
 
     pub fn check_allocation(r: &Results, sym: &str, expected: f32) {
         let a = r.allocations.get(sym).expect("missing symbol");
-        assert_that(a).is_close_to(expected, 0.01);
+        assert_that(a).is_close_to(expected, 0.001);
     }
 }

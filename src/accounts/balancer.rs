@@ -7,13 +7,31 @@ use std::collections::BinaryHeap;
 struct Needed {
     symbol: String,
     cash_delta: f32,
+    percentage_delta: f32,
+}
+
+impl Needed {
+    fn new(symbol: &str, cash_delta: f32, portfolio: &Portfolio) -> Self {
+        let balanced_amount =
+            portfolio.target.get(symbol).expect("missing target") * portfolio.total_value();
+        let percentage_delta = if balanced_amount > 0.0 {
+            cash_delta / balanced_amount
+        } else {
+            0.0
+        };
+        Needed {
+            symbol: symbol.into(),
+            cash_delta,
+            percentage_delta,
+        }
+    }
 }
 
 impl Eq for Needed {}
 
 impl PartialOrd for Needed {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.cash_delta.partial_cmp(&other.cash_delta)
+        self.percentage_delta.partial_cmp(&other.percentage_delta)
     }
 }
 
@@ -25,7 +43,7 @@ impl Ord for Needed {
 
 impl PartialEq for Needed {
     fn eq(&self, other: &Self) -> bool {
-        self.cash_delta == other.cash_delta
+        self.percentage_delta == other.percentage_delta
     }
 }
 
@@ -59,7 +77,10 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
     let mut results = Results::from_positions(&accounts);
 
-    println!("Accounts before action: {:?}", results.positions);
+    println!(
+        "Accounts before action: {:?} with value {}",
+        results.positions, total_value
+    );
     println!("   disallowing sales: {:?}", &portfolio.no_sale_accounts);
     println!("Shares delta before action: {:?}", shares_delta);
     println!("Median yield={:?}, yields={:?}", median_yield, yields);
@@ -109,10 +130,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
     println!("cash delta before buys: {:?}", &cash_delta);
     let mut needed_funds = BinaryHeap::new();
     for (sym, value_needed) in cash_delta.into_iter() {
-        needed_funds.push(Needed {
-            symbol: sym.clone(),
-            cash_delta: value_needed,
-        });
+        needed_funds.push(Needed::new(sym, value_needed, &portfolio));
     }
 
     println!("needed heap before start: {:?}", needed_funds);
@@ -125,7 +143,7 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
         let symbol = &next.symbol;
         let price = *prices.get(symbol).expect("unexpected missing price");
         let shares = next.cash_delta / price;
-        if shares < 1.0 {
+        if shares <= 0.0 {
             continue;
         }
 
@@ -144,8 +162,12 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 if let Some(_) = results.buy_maybe(&account.name, symbol, price, 1.0) {
                     bought = true;
                     println!(
-                        "high-yield: acct={}, bought {}@{}, fc={:?}",
-                        account.name, symbol, price, results.cash
+                        "high-yield: acct={}, bought {}@{}, fc={:?}, diff={:.2}%",
+                        account.name,
+                        symbol,
+                        price,
+                        results.cash,
+                        next.percentage_delta * 100.0,
                     );
                     break;
                 }
@@ -161,8 +183,12 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
                 if let Some(_) = results.buy_maybe(&account.name, symbol, price, 1.0) {
                     bought = true;
                     println!(
-                        "acct={}, bought {}@{}, fc={:?}",
-                        account.name, symbol, price, results.cash
+                        "acct={}, bought {}@{}, fc={:?}, diff={:.2}%",
+                        account.name,
+                        symbol,
+                        price,
+                        results.cash,
+                        next.percentage_delta * 100.0,
                     );
                     break;
                 }
@@ -171,11 +197,8 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
         if bought {
             let new_needed = next.cash_delta - price;
-            if new_needed > price {
-                needed_funds.push(Needed {
-                    symbol: next.symbol,
-                    cash_delta: new_needed,
-                });
+            if new_needed > 0.0 {
+                needed_funds.push(Needed::new(&next.symbol, new_needed, &portfolio));
             }
         }
     }
@@ -187,18 +210,14 @@ pub fn run_balancing(portfolio: Portfolio) -> Results {
 
         for sym in symbols_by_price.iter() {
             let price = *prices.get(*sym).expect("unexpected missing price");
-
             for account in accounts.iter() {
-                match results.buy_maybe(&account.name, sym, price, 1.0) {
-                    Some(_) => {
-                        bought = true;
-                        println!(
-                            "extra: acct={}, bought {}@{}, fc={:?}",
-                            account.name, sym, price, results.cash
-                        );
-                        break; // we found an account to hold the extra share, move on to next fund
-                    }
-                    _ => (),
+                if let Some(_) = results.buy_maybe(&account.name, sym, price, 1.0) {
+                    bought = true;
+                    println!(
+                        "extra: acct={}, bought {}@{}, fc={:?}",
+                        account.name, sym, price, results.cash
+                    );
+                    break; // we found an account to hold the extra share, move on to next fund
                 }
             }
         }
@@ -353,15 +372,21 @@ mod single_account {
         let mut p = build_portfolio();
         {
             let a = p.accounts.index_mut(0);
-            a.cash = 500.0;
+            a.cash = 507.0;
+            p.target.insert(String::from("C"), 0.0);
+            p.market.push(Investment::new("C", 1.0));
         }
 
         let r = run_balancing(p);
 
-        // this is overweight in A shares since there was spare cash
+        // overweight in B shares, we buy one we don't need all of
         assert_that(&r.total_cash).is_close_to(0.0, 0.1);
-        check_shares(&r, "taxed", "A", 30.0);
-        check_shares(&r, "taxed", "B", 2.0);
+        check_shares(&r, "taxed", "A", 20.0);
+        check_shares(&r, "taxed", "B", 3.0);
+        check_shares(&r, "taxed", "C", 7.0);
+        check_allocation(&r, "A", 0.394);
+        check_allocation(&r, "B", 0.592);
+        check_allocation(&r, "C", 0.014);
     }
 
     #[test]
@@ -393,6 +418,35 @@ mod single_account {
         check_shares(&r, "taxed", "A", 55.0);
         check_shares(&r, "taxed", "B", 25.0);
         check_shares(&r, "taxed", "C", 20.0);
+    }
+
+    #[test]
+    fn buys_percentage_needed() {
+        let mut p = Portfolio::new();
+        let mut acct = Account::new("taxed");
+        acct.cash = 3.0; // not enough cash to fully balance
+        acct.positions.insert(String::from("A"), 88.0);
+        acct.positions.insert(String::from("B"), 7.0);
+        acct.positions.insert(String::from("C"), 0.0);
+        p.accounts.push(acct);
+        p.no_sale_accounts.insert(String::from("taxed"));
+        p.target.insert(String::from("A"), 0.90);
+        p.target.insert(String::from("B"), 0.08);
+        p.target.insert(String::from("C"), 0.02);
+
+        p.market.push(Investment::new("A", 1.0));
+        p.market.push(Investment::new("B", 1.0));
+        p.market.push(Investment::new("C", 1.0));
+
+        let r = run_balancing(p);
+
+        // we need $2 more A, $1 more B and $2 C
+        // so naively we'd buy A and C
+        // but it's 100% more C and ~2% more A so instead we buy B
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_shares(&r, "taxed", "A", 88.0);
+        check_shares(&r, "taxed", "B", 8.0);
+        check_shares(&r, "taxed", "C", 2.0);
     }
 }
 
