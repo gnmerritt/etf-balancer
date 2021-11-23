@@ -284,6 +284,31 @@ mod single_account {
         check_allocation(&r, "cash", 0.001);
     }
 
+    #[test]
+    fn simple_cash_neeed() {
+        let mut p = build_portfolio();
+        p.accounts.index_mut(0).cash = -5_000.0;
+        p.accounts
+            .index_mut(0)
+            .positions
+            .insert("A".to_string(), 500.0);
+        p.accounts
+            .index_mut(0)
+            .positions
+            .insert("A".to_string(), 500.0);
+        p.accounts
+            .index_mut(0)
+            .positions
+            .insert("B".to_string(), 50.0);
+
+        let r = run_balancing(p);
+
+        assert_that(&r.total_cash).is_close_to(0.0, 0.1);
+        check_allocation(&r, "A", 0.499);
+        check_allocation(&r, "B", 0.499);
+        check_allocation(&r, "cash", 0.001);
+    }
+
     pub fn check_shares(r: &Results, acct: &str, sym: &str, expected: f32) {
         let account = r.positions.get(acct).expect("missing account");
         let shares = account.get(sym);

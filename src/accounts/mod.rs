@@ -162,7 +162,7 @@ impl Results {
     ) -> Option<f32> {
         let cash = self.cash(account, 0.0);
         let gross = price * shares;
-        if gross > cash {
+        if gross > 0.0 && gross > cash {
             return None;
         }
         self.cash(account, -1.0 * gross);
