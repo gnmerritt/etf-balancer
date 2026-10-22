@@ -1,3 +1,6 @@
+use std::env;
+use std::net::Ipv4Addr;
+
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use etf_balancer::accounts::Portfolio;
 use etf_balancer::run_balancing;
@@ -19,8 +22,13 @@ async fn balance(accounts: web::Json<Portfolio>) -> impl Responder {
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
+    let port = env::args()
+        .nth(1)
+        .and_then(|p| p.parse::<u16>().ok())
+        .expect("missing or invalid port argument");
+    println!("starting etf-balancer on port {port}");
     HttpServer::new(|| App::new().service(index).service(balance))
-        .bind("127.0.0.1:8000")?
+        .bind((Ipv4Addr::UNSPECIFIED, port))?
         .run()
         .await
 }
